@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>A Rose Garden</title>
+  <meta name="description" content="Roses that never wilt — an interactive digital garden.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌹</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0B0B0F;
+      --cream: #FDF6F0;
+      --accent: #F5C99B;
+      --rose: #E28CA0;
+      --leaf: #4A7C59;
+      --stem: #2D5A3D;
+      --serif: "Cormorant Garamond", Georgia, serif;
+      --mono: "JetBrains Mono", ui-monospace, monospace;
+      --ease: cubic-bezier(.22, 1, .36, 1);
+      --bounce: cubic-bezier(.34, 1.56, .64, 1);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--cream);
+      font-family: var(--serif);
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    #stage {
+      position: fixed;
+      inset: 0;
+      height: 100dvh;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    /* Soft radial glow behind the garden */
+    #glow {
+      position: absolute;
+      left: 50%;
+      top: 55%;
+      width: min(140vw, 1100px);
+      aspect-ratio: 1 / 0.9;
+      transform: translate(-50%, -50%);
+      background: radial-gradient(closest-side,
+        rgba(245, 201, 155, 0.18) 0%,
+        rgba(226, 140, 160, 0.08) 40%,
+        transparent 70%);
+      opacity: 0;
+      animation: fadeIn 3s var(--ease) 1.8s forwards;
+      pointer-events: none;
+    }
+
+    #vignette {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(closest-side at 50% 55%,
+        transparent 45%,
+        rgba(0,0,0,0.55) 100%);
+      pointer-events: none;
+    }
+
+    #garden {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Stem growth */
+    .stem {
+      fill: none;
+      stroke: var(--stem);
+      stroke-width: 2.2;
+      stroke-linecap: round;
+      stroke-dasharray: 120;
+      stroke-dashoffset: 120;
+      animation: growStem 1.6s var(--ease) forwards;
+      animation-delay: var(--delay);
+    }
+    @keyframes growStem {
+      to { stroke-dashoffset: 0; }
+    }
+
+    /* Leaves */
+    .leaf {
+      fill: url(#leafGrad);
+      transform-box: fill-box;
+      transform-origin: 0% 50%;
+      transform: scale(0.05, 0.4);
+      opacity: 0;
+      animation: openLeaf 0.7s var(--bounce) forwards;
+      animation-delay: calc(var(--delay) + 0.6s + var(--leaf-i) * 0.12s);
+    }
+    @keyframes openLeaf {
+      to { transform: scale(1, 1); opacity: 1; }
+    }
+
+    /* Petals – start rolled and tight, then unfurl */
+    .petal {
+      transform-box: fill-box;
+      transform-origin: 50% 100%;
+      transform: scale(0.08, 0.25) rotate(-22deg);
+      opacity: 0;
+      animation: unfurl 1s var(--ease) forwards;
+      animation-delay: calc(var(--bloom-delay) + var(--petal-i) * 0.045s);
+    }
+    @keyframes unfurl {
+      0%   { transform: scale(0.08, 0.25) rotate(-22deg); opacity: 0; }
+      45%  { opacity: 1; }
+      70%  { transform: scale(1.05, 1.02) rotate(3deg); }
+      100% { transform: scale(1) rotate(0deg); opacity: 1; }
+    }
+
+    /* Rose center swirl */
+    .swirl {
+      transform-box: fill-box;
+      transform-origin: 50% 100%;
+      transform: scale(0.15) rotate(-40deg);
+      opacity: 0;
+      animation: swirlIn 0.8s var(--bounce) forwards;
+      animation-delay: calc(var(--bloom-delay) + 0.4s);
+    }
+    @keyframes swirlIn {
+      to { transform: scale(1) rotate(0); opacity: 1; }
+    }
+
+    /* Sepals */
+    .sepal {
+      fill: #3A6B4A;
+      transform-box: fill-box;
+      transform-origin: 50% 100%;
+      transform: scaleY(0.1);
+      opacity: 0;
+      animation: sepalUp 0.65s var(--ease) forwards;
+      animation-delay: calc(var(--bloom-delay) - 0.15s);
+    }
+    @keyframes sepalUp {
+      to { transform: scaleY(1); opacity: 0.95; }
+    }
+
+    /* Sunflower disc & seeds */
+    .disc {
+      transform-box: fill-box;
+      transform-origin: 50% 50%;
+      transform: scale(0.1);
+      opacity: 0;
+      animation: popIn 0.7s var(--bounce) forwards;
+      animation-delay: calc(var(--bloom-delay) + 0.3s);
+    }
+    .seed {
+      transform-box: fill-box;
+      transform-origin: 50% 50%;
+      transform: scale(0);
+      opacity: 0;
+      animation: popIn 0.4s var(--bounce) forwards;
+      animation-delay: calc(var(--bloom-delay) + 0.55s + var(--seed-i) * 0.012s);
+    }
+    @keyframes popIn {
+      to { transform: scale(1); opacity: 1; }
+    }
+
+    /* Gentle sway */
+    .sway {
+      transform-box: view-box;
+      transform-origin: var(--ox) 820px;
+      animation: sway var(--sway-dur) ease-in-out infinite;
+      animation-delay: var(--sway-delay);
+    }
+    @keyframes sway {
+      0%, 100% { transform: rotate(0deg); }
+      25%      { transform: rotate(-1.2deg); }
+      75%      { transform: rotate(1.2deg); }
+    }
+
+    /* Breathing bloom */
+    .breathe {
+      animation: breathe var(--breathe-dur) ease-in-out infinite;
+      animation-delay: var(--breathe-delay);
+    }
+    @keyframes breathe {
+      0%, 100% { transform: scale(1); }
+      50%      { transform: scale(1.025) rotate(0.8deg); }
+    }
+
+    /* Falling petals on click */
+    .falling {
+      position: absolute;
+      pointer-events: none;
+      border-radius: 60% 15% 60% 15%;
+      will-change: transform, opacity;
+    }
+
+    /* Message overlay */
+    #message {
+      position: absolute;
+      left: 0; right: 0;
+      top: 48%;
+      transform: translateY(-50%);
+      padding: 0 8vw;
+      text-align: center;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    .rise {
+      opacity: 0;
+      transform: translateY(24px);
+      animation: riseUp 1.4s var(--ease) forwards;
+      animation-delay: var(--d);
+    }
+    @keyframes riseUp {
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    #eyebrow {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.32em;
+      text-transform: uppercase;
+      color: rgba(245, 201, 155, 0.55);
+      margin-bottom: 1.4em;
+    }
+
+    #to {
+      display: block;
+      font-size: clamp(38px, 12vw, 72px);
+      font-weight: 300;
+      line-height: 1.05;
+      color: var(--cream);
+    }
+
+    #dedication {
+      margin-top: 0.9em;
+      font-size: clamp(15px, 4.2vw, 22px);
+      font-weight: 300;
+      font-style: italic;
+      line-height: 1.55;
+      color: var(--cream);
+      opacity: 0.82;
+    }
+
+    #from {
+      display: block;
+      margin-top: 1.8em;
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: rgba(245, 201, 155, 0.45);
+    }
+
+    /* Controls */
+    #controls {
+      position: absolute;
+      bottom: 28px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 10px;
+      z-index: 20;
+      opacity: 0;
+      animation: fadeIn 1s var(--ease) 8s forwards;
+    }
+
+    .btn {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 10px 16px;
+      border: 1px solid rgba(245, 201, 155, 0.35);
+      background: rgba(11, 11, 15, 0.7);
+      color: var(--accent);
+      border-radius: 999px;
+      cursor: pointer;
+      backdrop-filter: blur(8px);
+      transition: background 0.25s, border-color 0.25s, transform 0.2s;
+    }
+    .btn:hover {
+      background: rgba(245, 201, 155, 0.12);
+      border-color: var(--accent);
+      transform: translateY(-1px);
+    }
+
+    /* Theme switcher */
+    #themes {
+      position: absolute;
+      top: 20px;
+      right: 18px;
+      display: flex;
+      gap: 8px;
+      z-index: 20;
+      opacity: 0;
+      animation: fadeIn 1s var(--ease) 6s forwards;
+    }
+    .theme-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      border: 1.5px solid rgba(255,255,255,0.3);
+      cursor: pointer;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+    .theme-dot:hover, .theme-dot.active {
+      transform: scale(1.25);
+      border-color: white;
+    }
+
+    /* Edit panel */
+    #edit {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(0.96);
+      width: min(340px, 90vw);
+      background: rgba(15, 15, 20, 0.92);
+      border: 1px solid rgba(245, 201, 155, 0.25);
+      border-radius: 16px;
+      padding: 28px 24px;
+      z-index: 30;
+      backdrop-filter: blur(16px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s, transform 0.3s;
+    }
+    #edit.open {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translate(-50%, -50%) scale(1);
+    }
+    #edit h3 {
+      font-weight: 300;
+      font-size: 22px;
+      margin-bottom: 18px;
+      text-align: center;
+    }
+    #edit label {
+      display: block;
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: rgba(245, 201, 155, 0.6);
+      margin: 14px 0 6px;
+    }
+    #edit input, #edit textarea {
+      width: 100%;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: var(--cream);
+      font-family: var(--serif);
+      font-size: 16px;
+      outline: none;
+      resize: none;
+    }
+    #edit input:focus, #edit textarea:focus {
+      border-color: var(--accent);
+    }
+    #edit .actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 22px;
+    }
+    #edit .actions .btn {
+      flex: 1;
+      text-align: center;
+    }
+
+    @keyframes fadeIn {
+      to { opacity: 1; }
+    }
+
+    /* Theme: Night (default) already set */
+    [data-theme="love"] {
+      --bg: #1A0F14;
+      --accent: #F5B8C8;
+      --rose: #E87A9A;
+    }
+    [data-theme="code"] {
+      --bg: #0A0E14;
+      --accent: #7EE0A8;
+      --rose: #5BBF8A;
+      --cream: #E8F5EE;
+    }
+    [data-theme="paper"] {
+      --bg: #F7F0E8;
+      --cream: #2A221C;
+      --accent: #C47A5A;
+      --rose: #D48A7A;
+      --stem: #5A6B4A;
+      --leaf: #6B8A5A;
+    }
+    [data-theme="paper"] #vignette {
+      background: radial-gradient(closest-side at 50% 55%,
+        transparent 40%,
+        rgba(180, 150, 120, 0.35) 100%);
+    }
+    [data-theme="paper"] .btn {
+      border-color: rgba(42, 34, 28, 0.3);
+      background: rgba(247, 240, 232, 0.8);
+      color: var(--cream);
+    }
+
+    /* Reduced motion */
+    @media (prefers-reduced-motion: reduce) {
+      .stem, .leaf, .petal, .swirl, .sepal, .disc, .seed, .sway, .breathe {
+        animation: none !important;
+        opacity: 1 !important;
+        transform: none !important;
+        stroke-dashoffset: 0 !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="stage">
+    <div id="glow"></div>
+    <div id="vignette"></div>
+
+    <svg id="garden" viewBox="0 0 400 900" preserveAspectRatio="xMidYMax meet">
+      <defs>
+        <linearGradient id="leafGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#5A9A6A"/>
+          <stop offset="100%" stop-color="#2D5A3D"/>
+        </linearGradient>
+        <radialGradient id="rosePetal" cx="40%" cy="30%" r="70%">
+          <stop offset="0%" stop-color="#F5C0C8"/>
+          <stop offset="55%" stop-color="#E28CA0"/>
+          <stop offset="100%" stop-color="#C45A70"/>
+        </radialGradient>
+        <radialGradient id="roseDark" cx="50%" cy="70%" r="60%">
+          <stop offset="0%" stop-color="#B84A62"/>
+          <stop offset="100%" stop-color="#8A3048"/>
+        </radialGradient>
+        <radialGradient id="sunPetal" cx="40%" cy="30%" r="70%">
+          <stop offset="0%" stop-color="#FFE08A"/>
+          <stop offset="100%" stop-color="#E8A830"/>
+        </radialGradient>
+        <radialGradient id="discGrad" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#5A3A1A"/>
+          <stop offset="100%" stop-color="#2A1A08"/>
+        </radialGradient>
+      </defs>
+      <!-- Flowers will be injected here -->
+    </svg>
+
+    <div id="message">
+      <div id="eyebrow" class="rise" style="--d: 6.8s">a garden that never wilts</div>
+      <span id="to" class="rise" style="--d: 7.2s">For you</span>
+      <div id="dedication" class="rise" style="--d: 7.7s">
+        Something small, grown with care.<br>
+        May it bloom whenever you need it.
+      </div>
+      <span id="from" class="rise" style="--d: 8.3s"></span>
+    </div>
+
+    <div id="themes">
+      <div class="theme-dot active" data-theme="night" style="background:#0B0B0F" title="Night Garden"></div>
+      <div class="theme-dot" data-theme="love" style="background:#E28CA0" title="Love Letter"></div>
+      <div class="theme-dot" data-theme="code" style="background:#5BBF8A" title="Code of Love"></div>
+      <div class="theme-dot" data-theme="paper" style="background:#F7F0E8" title="Love Letter Paper"></div>
+    </div>
+
+    <div id="controls">
+      <button class="btn" id="btn-edit">Edit</button>
+      <button class="btn" id="btn-share">Share</button>
+      <button class="btn" id="btn-again">Bloom again</button>
+    </div>
+
+    <div id="edit">
+      <h3>Personalize</h3>
+      <label>To</label>
+      <input type="text" id="input-to" placeholder="Someone special" maxlength="40">
+      <label>Message</label>
+      <textarea id="input-msg" rows="3" placeholder="A few words…" maxlength="160"></textarea>
+      <label>From</label>
+      <input type="text" id="input-from" placeholder="Your name" maxlength="30">
+      <div class="actions">
+        <button class="btn" id="btn-cancel">Cancel</button>
+        <button class="btn" id="btn-save">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ─────────────────────────────────────────────
+    //  Seeded random for reproducible gardens
+    // ─────────────────────────────────────────────
+    function mulberry32(a) {
+      return function() {
+        a |= 0; a = a + 0x6D2B79F5 | 0;
+        let t = Math.imul(a ^ a >>> 15, 1 | a);
+        t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+      };
+    }
+
+    const params = new URLSearchParams(location.search);
+    const seed = params.get('seed') ? parseInt(params.get('seed'), 10) : (Date.now() % 999999);
+    const rand = mulberry32(seed);
+
+    // ─────────────────────────────────────────────
+    //  Flower placement (x, baseY, type, scale, sway)
+    // ─────────────────────────────────────────────
+    const plants = [
+      { x: 70,  y: 780, type: 'rose',      s: 0.85, delay: 0.4 },
+      { x: 155, y: 820, type: 'sunflower', s: 1.05, delay: 0.9 },
+      { x: 240, y: 760, type: 'rose',      s: 0.95, delay: 0.2 },
+      { x: 320, y: 800, type: 'rose',      s: 0.75, delay: 1.1 },
+      { x: 100, y: 700, type: 'sunflower', s: 0.7,  delay: 1.5 },
+      { x: 280, y: 690, type: 'rose',      s: 0.65, delay: 1.8 },
+      { x: 200, y: 850, type: 'rose',      s: 1.15, delay: 0.0 },
+      { x: 40,  y: 720, type: 'rose',      s: 0.55, delay: 2.1 },
+      { x: 360, y: 740, type: 'sunflower', s: 0.6,  delay: 1.3 },
+    ];
+
+    const svg = document.getElementById('garden');
+
+    // ─────────────────────────────────────────────
+    //  Create a single rose
+    // ─────────────────────────────────────────────
+    function createRose(p) {
+      const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      g.classList.add('sway');
+      g.style.setProperty('--ox', p.x + 'px');
+      g.style.setProperty('--sway-dur', (5 + rand() * 4) + 's');
+      g.style.setProperty('--sway-delay', (rand() * 2) + 's');
+      g.style.setProperty('--delay', p.delay + 's');
+
+      // Stem
+      const stem = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      const sway = (rand() - 0.5) * 18;
+      stem.setAttribute('d', `M${p.x} ${p.y} C${p.x + sway} ${p.y - 80}, ${p.x - sway * 0.6} ${p.y - 160}, ${p.x} ${p.y - 220}`);
+      stem.classList.add('stem');
+      stem.style.setProperty('--delay', p.delay + 's');
+      g.appendChild(stem);
+
+      // Leaves
+      for (let i = 0; i < 3; i++) {
+        const ly = p.y - 60 - i * 45;
+        const side = i % 2 === 0 ? 1 : -1;
+        const leaf = document.createElementNS('http://www.w3.org/2000/svg', 'ellipse');
+        leaf.setAttribute('cx', p.x + side * 18);
+        leaf.setAttribute('cy', ly);
+        leaf.setAttribute('rx', 14 + rand() * 6);
+        leaf.setAttribute('ry', 7 + rand() * 3);
+        leaf.setAttribute('transform', `rotate(${side * 35} ${p.x + side * 18} ${ly})`);
+        leaf.classList.add('leaf');
+        leaf.style.setProperty('--delay', p.delay + 's');
+        leaf.style.setProperty('--leaf-i', i);
+        g.appendChild(leaf);
+      }
+
+      // Bloom group
+      const bloom = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      bloom.classList.add('breathe');
+      bloom.style.setProperty('--breathe-dur', (4 + rand() * 3) + 's');
+      bloom.style.setProperty('--breathe-delay', (rand() * 2) + 's');
+      bloom.style.setProperty('--bloom-delay', (p.delay + 1.2) + 's');
+
+      const bx = p.x;
+      const by = p.y - 230;
+
+      // Sepals
+      for (let i = 0; i < 5; i++) {
+        const angle = (i / 5) * 360 - 90;
+        const sepal = document.createElementNS('http://www.w3.org/2000/svg', 'ellipse');
+        sepal.setAttribute('cx', bx);
+        sepal.setAttribute('cy', by + 8);
+        sepal.setAttribute('rx', 6);
+        sepal.setAttribute('ry', 11);
+        sepal.setAttribute('transform', `rotate(${angle} ${bx} ${by + 8})`);
+        sepal.classList.add('sepal');
+        sepal.style.setProperty('--bloom-delay', (p.delay + 1.2) + 's');
+        bloom.appendChild(sepal);
+      }
+
+      // Petals – 3 layers
+      const layers = [
+        { count: 5,  r: 22, dark: false },
+        { count: 7,  r: 16, dark: false },
+        { count: 5,  r: 10, dark: true  },
+      ];
+      let petalIdx = 0;
+      layers.forEach((layer, li) => {
+        for (let i = 0; i < layer.count; i++) {
+          const angle = (i / layer.count) * 360 + li * 12;
+          const rad = angle * Math.PI / 180;
+          const px = bx + Math.cos(rad) * (layer.r * 0.3);
+          const py = by + Math.sin(rad) * (layer.r * 0.25) - 4;
+          const petal = document.createElementNS('http://www.w3.org/2000/svg', 'ellipse');
+          petal.setAttribute('cx', px);
+          petal.setAttribute('cy', py);
+          petal.setAttribute('rx', layer.r * (0.7 + rand() * 0.25));
+          petal.setAttribute('ry', layer.r * (0.95 + rand() * 0.2));
+          petal.setAttribute('fill', layer.dark ? 'url(#roseDark)' : 'url(#rosePetal)');
+          petal.setAttribute('transform', `rotate(${angle + 90} ${px} ${py})`);
+          petal.classList.add('petal');
+          petal.style.setProperty('--bloom-delay', (p.delay + 1.2) + 's');
+          petal.style.setProperty('--petal-i', petalIdx++);
+          bloom.appendChild(petal);
+        }
+      });
+
+      // Center swirl
+      const swirl = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      swirl.setAttribute('cx', bx);
+      swirl.setAttribute('cy', by - 2);
+      swirl.setAttribute('r', 5);
+      swirl.setAttribute('fill', '#8A3048');
+      swirl.classList.add('swirl');
+      swirl.style.setProperty('--bloom-delay', (p.delay + 1.2) + 's');
+      bloom.appendChild(swirl);
+
+      g.appendChild(bloom);
+      return g;
+    }
+
+    // ─────────────────────────────────────────────
+    //  Create a sunflower
+    // ─────────────────────────────────────────────
+    function createSunflower(p) {
+      const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      g.classList.add('sway');
+      g.style.setProperty('--ox', p.x + 'px');
+      g.style.setProperty('--sway-dur', (6 + rand() * 3) + 's');
+      g.style.setProperty('--sway-delay', (rand() * 2) + 's');
+
+      // Stem
+      const stem = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      const sway = (rand() - 0.5) * 12;
+      stem.setAttribute('d', `M${p.x} ${p.y} C${p.x + sway} ${p.y - 90}, ${p.x - sway * 0.5} ${p.y - 180}, ${p.x} ${p.y - 260}`);
+      stem.classList.add('stem');
+      stem.style.setProperty('--delay', p.delay + 's');
+      g.appendChild(stem);
+
+      // Leaves
+      for (let i = 0; i < 2; i++) {
+        const ly = p.y - 70 - i * 70;
+        const side = i % 2 === 0 ? 1 : -1;
+        const leaf = document.createElementNS('http://www.w3.org/2000/svg', 'ellipse');
+        leaf.setAttribute('cx', p.x + side * 22);
+        leaf.setAttribute('cy', ly);
+        leaf.setAttribute('rx', 18);
+        leaf.setAttribute('ry', 9);
+        leaf.setAttribute('transform', `rotate(${side * 40} ${p.x + side * 22} ${ly})`);
+        leaf.classList.add('leaf');
+        leaf.style.setProperty('--delay', p.delay + 's');
+        leaf.style.setProperty('--leaf-i', i);
+        g.appendChild(leaf);
+      }
+
+      const bloom = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      bloom.classList.add('breathe');
+      bloom.style.setProperty('--breathe-dur', (5 + rand() * 2) + 's');
+      bloom.style.setProperty('--breathe-delay', (rand() * 1.5) + 's');
+      bloom.style.setProperty('--bloom-delay', (p.delay + 1.3) + 's');
+
+      const bx = p.x;
+      const by = p.y - 270;
+
+      // Petals
+      for (let i = 0; i < 16; i++) {
+        const angle = (i / 16) * 360;
+        const rad = angle * Math.PI / 180;
+        const px = bx + Math.cos(rad) * 8;
+        const py = by + Math.sin(rad) * 8;
+        const petal = document.createElementNS('http://www.w3.org/2000/svg', 'ellipse');
+        petal.setAttribute('cx', px);
+        petal.setAttribute('cy', py);
+        petal.setAttribute('rx', 7);
+        petal.setAttribute('ry', 22);
+        petal.setAttribute('fill', 'url(#sunPetal)');
+        petal.setAttribute('transform', `rotate(${angle + 90} ${px} ${py})`);
+        petal.classList.add('petal');
+        petal.style.setProperty('--bloom-delay', (p.delay + 1.3) + 's');
+        petal.style.setProperty('--petal-i', i);
+        bloom.appendChild(petal);
+      }
+
+      // Disc
+      const disc = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      disc.setAttribute('cx', bx);
+      disc.setAttribute('cy', by);
+      disc.setAttribute('r', 16);
+      disc.setAttribute('fill', 'url(#discGrad)');
+      disc.classList.add('disc');
+      disc.style.setProperty('--bloom-delay', (p.delay + 1.3) + 's');
+      bloom.appendChild(disc);
+
+      // Seeds (Fibonacci-ish)
+      for (let i = 0; i < 28; i++) {
+        const a = i * 137.5 * Math.PI / 180;
+        const r = 3 + Math.sqrt(i) * 2.2;
+        const seed = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        seed.setAttribute('cx', bx + Math.cos(a) * r);
+        seed.setAttribute('cy', by + Math.sin(a) * r);
+        seed.setAttribute('r', 1.4);
+        seed.setAttribute('fill', i % 3 === 0 ? '#3A2A10' : '#5A4020');
+        seed.classList.add('seed');
+        seed.style.setProperty('--bloom-delay', (p.delay + 1.3) + 's');
+        seed.style.setProperty('--seed-i', i);
+        bloom.appendChild(seed);
+      }
+
+      g.appendChild(bloom);
+      return g;
+    }
+
+    // ─────────────────────────────────────────────
+    //  Build garden
+    // ─────────────────────────────────────────────
+    function buildGarden() {
+      // clear previous (except defs)
+      while (svg.children.length > 1) svg.removeChild(svg.lastChild);
+
+      plants.forEach(p => {
+        const plant = p.type === 'sunflower' ? createSunflower(p) : createRose(p);
+        // scale around base
+        plant.setAttribute('transform', `translate(${p.x*(1-p.s)} ${p.y*(1-p.s)}) scale(${p.s})`);
+        svg.appendChild(plant);
+      });
+    }
+
+    buildGarden();
+
+    // ─────────────────────────────────────────────
+    //  Falling petals on click
+    // ─────────────────────────────────────────────
+    const stage = document.getElementById('stage');
+    stage.addEventListener('click', (e) => {
+      if (e.target.closest('#controls, #themes, #edit')) return;
+
+      for (let i = 0; i < 5 + Math.floor(rand() * 4); i++) {
+        const petal = document.createElement('div');
+        petal.className = 'falling';
+        const size = 8 + rand() * 12;
+        petal.style.width = size + 'px';
+        petal.style.height = size * 1.4 + 'px';
+        petal.style.left = e.clientX + (rand() - 0.5) * 40 + 'px';
+        petal.style.top = e.clientY + 'px';
+        petal.style.background = rand() > 0.4
+          ? `hsl(${340 + rand()*20}, 55%, ${55 + rand()*15}%)`
+          : `hsl(${40 + rand()*20}, 70%, ${55 + rand()*15}%)`;
+        petal.style.opacity = '0.85';
+        stage.appendChild(petal);
+
+        const dx = (rand() - 0.5) * 120;
+        const dy = 180 + rand() * 220;
+        const rot = (rand() - 0.5) * 360;
+        const dur = 1.8 + rand() * 1.2;
+
+        petal.animate([
+          { transform: 'translate(0,0) rotate(0deg)', opacity: 0.85 },
+          { transform: `translate(${dx}px, ${dy}px) rotate(${rot}deg)`, opacity: 0 }
+        ], {
+          duration: dur * 1000,
+          easing: 'cubic-bezier(0.25, 0.1, 0.25, 1)',
+          fill: 'forwards'
+        }).onfinish = () => petal.remove();
+      }
+    });
+
+    // ─────────────────────────────────────────────
+    //  Themes
+    // ─────────────────────────────────────────────
+    document.querySelectorAll('.theme-dot').forEach(dot => {
+      dot.addEventListener('click', () => {
+        document.querySelectorAll('.theme-dot').forEach(d => d.classList.remove('active'));
+        dot.classList.add('active');
+        document.documentElement.setAttribute('data-theme',
+          dot.dataset.theme === 'night' ? '' : dot.dataset.theme);
+      });
+    });
+
+    // ─────────────────────────────────────────────
+    //  Personalization (URL params + edit panel)
+    // ─────────────────────────────────────────────
+    const toEl = document.getElementById('to');
+    const dedEl = document.getElementById('dedication');
+    const fromEl = document.getElementById('from');
+
+    function applyParams() {
+      const to = params.get('to') || 'For you';
+      const msg = params.get('msg') || 'Something small, grown with care.\nMay it bloom whenever you need it.';
+      const from = params.get('from') || '';
+      toEl.textContent = to;
+      dedEl.innerHTML = msg.replace(/\n/g, '<br>');
+      fromEl.textContent = from ? `— ${from}` : '';
+    }
+    applyParams();
+
+    const editPanel = document.getElementById('edit');
+    document.getElementById('btn-edit').addEventListener('click', () => {
+      document.getElementById('input-to').value = toEl.textContent;
+      document.getElementById('input-msg').value = dedEl.innerText;
+      document.getElementById('input-from').value = fromEl.textContent.replace(/^—\s*/, '');
+      editPanel.classList.add('open');
+    });
+    document.getElementById('btn-cancel').addEventListener('click', () => {
+      editPanel.classList.remove('open');
+    });
+    document.getElementById('btn-save').addEventListener('click', () => {
+      const to = document.getElementById('input-to').value.trim() || 'For you';
+      const msg = document.getElementById('input-msg').value.trim() || 'Something small, grown with care.';
+      const from = document.getElementById('input-from').value.trim();
+      toEl.textContent = to;
+      dedEl.innerHTML = msg.replace(/\n/g, '<br>');
+      fromEl.textContent = from ? `— ${from}` : '';
+      // update URL without reload
+      const u = new URL(location);
+      u.searchParams.set('to', to);
+      u.searchParams.set('msg', msg);
+      if (from) u.searchParams.set('from', from); else u.searchParams.delete('from');
+      history.replaceState(null, '', u);
+      editPanel.classList.remove('open');
+    });
+
+    // ─────────────────────────────────────────────
+    //  Share
+    // ─────────────────────────────────────────────
+    document.getElementById('btn-share').addEventListener('click', async () => {
+      const url = location.href;
+      const text = `A rose garden that never wilts 🌹`;
+      if (navigator.share) {
+        try {
+          await navigator.share({ title: 'A Rose Garden', text, url });
+          return;
+        } catch (_) {}
+      }
+      try {
+        await navigator.clipboard.writeText(url);
+        const btn = document.getElementById('btn-share');
+        const old = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(() => btn.textContent = old, 1600);
+      } catch (_) {
+        prompt('Copy this link:', url);
+      }
+    });
+
+    // ─────────────────────────────────────────────
+    //  Bloom again
+    // ─────────────────────────────────────────────
+    document.getElementById('btn-again').addEventListener('click', () => {
+      buildGarden();
+      // re-trigger message animation by cloning
+      const msg = document.getElementById('message');
+      msg.querySelectorAll('.rise').forEach(el => {
+        el.style.animation = 'none';
+        el.offsetHeight; // reflow
+        el.style.animation = '';
+      });
+    });
+  </script>
+</body>
+</html>
